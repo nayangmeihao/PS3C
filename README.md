@@ -70,7 +70,7 @@ class CustomDataset(Dataset):
                 if folder_name == 'bothcells' or folder_name == 'unhealthy':
                     label = 'unhealthy'
                 else:
-                    label = folder_name  # 其他文件夹的名称即
+                    label = folder_name  
                 for image_name in os.listdir(folder_path):
                     image_path = os.path.join(folder_path, image_name)
                     self.image_paths.append(image_path)
