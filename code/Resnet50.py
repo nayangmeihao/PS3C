@@ -9,7 +9,7 @@ import torch.nn as nn
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 import numpy as np
 from PIL import Image
-from modules import CustomDataset_v1, calculate_mean_std, EarlyStopping, get_logger
+from modules import CustomDataset, calculate_mean_std, EarlyStopping, get_logger
 from sklearn.model_selection import train_test_split
 
 
@@ -20,27 +20,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(device)
 
 
-
 def train(train_loader, test_loader, num_epochs=30, nclass=3):
-    # 加载模型
     model = models.resnet50(pretrained=True)
 
-    # ResNet 的结构包括多个子模块，我们需要找到最后 10 层
-    all_layers = list(model.children())  # 提取所有子模块
-    logger.info(f"Total layers: {len(all_layers)}")  # 打印总层数
+    all_layers = list(model.children())
+    logger.info(f"Total layers: {len(all_layers)}")
 
-    # 根据 ResNet 层级结构，保留最后几个模块
-    num_layers_to_freeze = len(all_layers) - 10  # 冻结层的索引
+    num_layers_to_freeze = len(all_layers) - 10
 
     for idx, layer in enumerate(all_layers):
         if idx < num_layers_to_freeze:
             for param in layer.parameters():
-                param.requires_grad = False  # 冻结
+                param.requires_grad = False
         else:
             for param in layer.parameters():
-                param.requires_grad = True  # 解冻
+                param.requires_grad = True
 
-    # 打印验证哪些参数被冻结
     for name, param in model.named_parameters():
         logger.info(f"{name}: requires_grad={param.requires_grad}")
 
@@ -51,12 +46,12 @@ def train(train_loader, test_loader, num_epochs=30, nclass=3):
     model.fc = nn.Linear(num_ftrs, nclass)
     model = model.to(device)
 
-    # #优化器
+    # #optimizer
     # optimizer = optim.Adam(model.parameters(), lr=0.001)
-    # 根据类别权重，定义损失函数
+    # loss function
     class_counts = [5816, 28896, 50372]
     total_count = sum(class_counts)
-    weights = [total_count / count for count in class_counts]  # 较小的类别权重大
+    weights = [total_count / count for count in class_counts]
     weights = torch.tensor(weights).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
@@ -65,7 +60,7 @@ def train(train_loader, test_loader, num_epochs=30, nclass=3):
                                    model_path="../result/resnet50_model.pth")
 
     for epoch in range(num_epochs):
-        model.train()  # 切换到训练模式
+        model.train()
         running_loss = 0.0
         correct = 0
         total = 0
@@ -93,13 +88,12 @@ def train(train_loader, test_loader, num_epochs=30, nclass=3):
         f1_train = f1_score(all_labels_train, all_preds_train, average='weighted')
         logger.info(f"Training Dataset Precision: {precision_train:.4f}, Recall: {recall_train:.4f}, F1-Score: {f1_train:.4f}, Accuracy: {accuracy_train:.4f}")
 
-
         epoch_loss = running_loss / len(train_loader)
         # epoch_acc = correct / total
         logger.info(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.4f}")
 
         if epoch >= 39:
-            model.eval()  # 切换到评估模式
+            model.eval()
             # correct = 0
             total = 0
             all_preds_test = []
@@ -120,7 +114,6 @@ def train(train_loader, test_loader, num_epochs=30, nclass=3):
             f1_test = f1_score(all_labels_test, all_preds_test, average='weighted')
             logger.info(f"Validation Dataset Precision: {precision_test:.4f}, Recall: {recall_test:.4f}, F1-Score: {f1_test:.4f}, Accuracy: {accuracy_test:.4f}")
 
-            # 检查是否需要早停
             early_stopping(f1_test, model)
             if early_stopping.early_stop:
                 logger.info("Early stopping")
@@ -128,7 +121,6 @@ def train(train_loader, test_loader, num_epochs=30, nclass=3):
 
 if __name__ == '__main__':
     batch = 120
-    # 数据集路径
     root_dir = '../../isbi_data/isbi2025-ps3c-train-dataset'
     # target_mean, target_std = calculate_mean_std(image_folder=root_dir)
     # Result: target_mean = [172.60249999, 133.93109593, 125.11238891], target_std = [41.87876043, 10.9258465, 10.77863437]
@@ -155,18 +147,15 @@ if __name__ == '__main__':
 
     dataset = CustomDataset_v1(root_dir='../../isbi_data/isbi2025-ps3c-train-dataset', transform=transform)
 
-    # 划分数据集为训练集和测试集（80%训练，20%测试）
+    # 80% data for training，20% for test）
     train_indices, test_indices = train_test_split(list(range(len(dataset))), test_size=0.2, stratify=dataset.labels)
     train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
     test_sampler = torch.utils.data.SubsetRandomSampler(test_indices)
 
-
-    # 创建DataLoader
+    # DataLoader
     train_loader = DataLoader(dataset, batch_size=batch, sampler=train_sampler, num_workers=4, pin_memory=True)
     test_loader = DataLoader(dataset, batch_size=batch, sampler=test_sampler, num_workers=4, pin_memory=True)
 
-
-    # 打印一下训练集和测试集大小
     logger.info(f'Training set size: {len(train_indices)}')
     logger.info(f'Test set size: {len(test_indices)}')
 

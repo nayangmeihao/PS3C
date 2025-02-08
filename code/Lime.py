@@ -22,24 +22,22 @@ explainer = lime_image.LimeImageExplainer()
 # model = models.resnet50(pretrained=True)
 # model.eval()  # Set model to evaluation mode
 
-# # Resnet50 定义模型结构
+# # Resnet50 model structure
 model = models.resnet50(pretrained=True)
-all_layers = list(model.children())  # 提取所有子模块
-print(f"Total layers: {len(all_layers)}")  # 打印总层数
-num_layers_to_freeze = len(all_layers) - 10  # 冻结层的索引
+all_layers = list(model.children())
+print(f"Total layers: {len(all_layers)}")
+num_layers_to_freeze = len(all_layers) - 10
 for idx, layer in enumerate(all_layers):
     if idx < num_layers_to_freeze:
         for param in layer.parameters():
-            param.requires_grad = False  # 冻结
+            param.requires_grad = False
     else:
         for param in layer.parameters():
-            param.requires_grad = True  # 解冻
+            param.requires_grad = True
 num_ftrs = model.fc.in_features
 nclass = 3
 model.fc = nn.Linear(num_ftrs, nclass)
 
-
-# 加载state_dict到模型
 model_path="../result/resnet50_fold1.pt"
 model.load_state_dict(torch.load(model_path, map_location=device))
 model = model.to(device)
@@ -72,25 +70,17 @@ def predict(imgs):
 
 
 def get_image(root_dir):
-    # 获取根目录下的所有子文件夹
     folders = [os.path.join(root_dir, folder) for folder in os.listdir(root_dir) if
                os.path.isdir(os.path.join(root_dir, folder))]
 
-    # 初始化存储随机图像路径的列表
     files = []
 
-    # 从每个子文件夹中随机选择一张图像
     for folder in folders:
-        # 获取当前文件夹内的所有图像文件
         images = [file for file in os.listdir(folder) if file.endswith(('.png', '.jpg', '.jpeg'))]
 
-        if images:  # 确保文件夹内有图像
-            # 随机选择一张图像
+        if images:
             random_image = random.choice(images)
-            # 获取完整路径并添加到文件列表
             files.append(os.path.join(folder, random_image))
-
-    # 输出随机选择的图像文件
     print("Randomly selected files:", files)
     return files
 
@@ -98,12 +88,10 @@ def get_image(root_dir):
 def Lime_fun(files):
     for img_path in files:
         # Load and preprocess the image
-        # 使用 / 分割，获取倒数第二个元素（即目标目录）
         middle_part = img_path.split("/")[-2]
         print(middle_part)  # 输出: healthy
 
         img = mpimg.imread(img_path)
-        # 确保图像是 RGB 格式
         if img.shape[-1] == 4:  # If the image has an alpha channel
             img = img[:, :, :3]  # Discard the alpha channel (RGBA -> RGB)
 
@@ -116,19 +104,16 @@ def Lime_fun(files):
         top_pred_idx = preds.argmax(dim=1).item()
         top_pred_label = preds[0, top_pred_idx].item()
 
-        all_pred_probs = preds[0].tolist()  # 获取当前样本所有类别的概率并转换为列表
-        print(all_pred_probs)  # 输出概率列表
+        all_pred_probs = preds[0].tolist()
+        print(all_pred_probs)
 
-        # 定义类别映射
         label_map = {0: 'unhealthy', 1: 'healthy', 2: 'rubbish'}
-        # 获取预测的类别名称
         top_pred_class = label_map[top_pred_idx]
-        # 输出预测类别
         print(f"Predicted class: {top_pred_class}, Confidence: {top_pred_label:.4f}")
 
         # LIME explanation
         explanation = explainer.explain_instance(
-            image=img,# 将图像去除batch维度
+            image=img, # remove batch
             classifier_fn=predict,
             top_labels=3,
             hide_color=0,
@@ -143,19 +128,12 @@ def Lime_fun(files):
             hide_rest=True
         )
 
-        # # 生成解释图像
-        # fig, ax = plt.subplots(figsize=(5, 5))
-        # ax.imshow(mark_boundaries(temp, mask))
-        # ax.axis('off')
-        # ax.set_title(f'LIME for Class {explanation.top_labels[0]}')
-        # plt.show()
-
         # Create a heatmap
         ind = explanation.top_labels[0]
         dict_heatmap = dict(explanation.local_exp[ind])
         heatmap = np.vectorize(dict_heatmap.get)(explanation.segments)
 
-        # 确保 result 目录存在
+        # Make sure there is a result dir
         os.makedirs('../result/', exist_ok=True)
         save_path = os.path.join('../result/', f"{middle_part}.png")
 
@@ -179,7 +157,7 @@ def Lime_fun(files):
         axs[3].set_title('LIME Heatmap Image\nConfidence: {:.2f}'.format(top_pred_label), fontsize=10)
 
         plt.tight_layout()
-        # 保存解释图
+        # save the image
         plt.savefig(save_path, bbox_inches="tight")
         print(f"Saved LIME result: {save_path}")
         plt.show()
